@@ -1,0 +1,81 @@
+
+(* -- Main process -- *)
+process
+  (* leaking the election private key *)
+  out(public,sk_e)
+ |
+  (* register any number of agents *)
+  !(in(public,n:name); out(public,(n,voter_registration(n))))
+ #IFDREGISTRAR|
+  (* dishonest registrar: any key may be declared as valid (eligible) *)
+  !(in(public,(n:name,spk:spkey)); out(public,valid(n,spk)))
+ #ENDIF|
+  (* honest voter voting for A, losing the voting sheet *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF#IFDVOTINGDEVICEout(public,voting_channel); (* dishonest voting device *)
+    #ENDIF
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_A_lostvs(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGDEVICEHonest_Voting_Device(voting_channel,voterchan(n))
+    |
+     #ENDIF#IFHVOTINGSERVERHonest_Voting_Server(voterchan(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )
+ |
+  (* honest voter voting for B *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF#IFDVOTINGDEVICEout(public,voting_channel); (* dishonest voting device *)
+    #ENDIF
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_B_lostvs(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGDEVICEHonest_Voting_Device(voting_channel,voterchan(n))
+    |
+     #ENDIF#IFHVOTINGSERVERHonest_Voting_Server(voterchan(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )
+ |
+  (* honest voter voting for A, losing the password *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIFout(public,voting_channel); (* dishonest voting device *)
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_A_lostpasswd(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGSERVERHonest_Voting_Server(voterchan(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )
+ |
+  (* honest voter voting for B, losing the password *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIFout(public,voting_channel); (* dishonest voting device *)
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_B_lostpasswd(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGSERVERHonest_Voting_Server(voterchan(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )
+ |
+ (* dishonest voters *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF(#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFDishonest_Voter(n,vs_channel)
+    |
+     #IFHVOTINGSERVERHonest_Voting_Server(voterchan(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )

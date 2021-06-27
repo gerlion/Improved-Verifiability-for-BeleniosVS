@@ -1,0 +1,16 @@
+(* Dishonest voter *)
+let Dishonest_Voter(n:name, vs_channel:channel) =
+  (* receiving the voting sheet *)
+  in(vs_channel,vs:bitstring);
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+
+  (* the voter is then associated to the verification key *)
+  event VOTER(n,spk_n,C);
+  (* The voter gives everything to the attacker *)
+  event FINISHED(n,spk_n);
+  out(public,(vs,voterchanup(n),voterchandown(n))).
+
+
+

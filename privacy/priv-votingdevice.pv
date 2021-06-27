@@ -1,0 +1,344 @@
+(* Privacy for BeleniosVS *)
+
+(* Trust assumptions:
+ - dishonest voting device
+ - hence no authentic channel between voting device and server,
+regardless of the password being lost or not
+ - honest voting server
+ - honest registrar and audit device (equivalently, honest registrar and no audit)
+*)
+
+
+(* -- Types -- *)
+(* Asymmetric keys encryption types *)
+type skey.
+type pkey.
+
+(* Signature keys *)
+type sskey.
+type spkey.
+
+(* Other types *)
+type rand.
+type name.
+type vote.
+
+(* -- Equational theory -- *)
+(* Randomized asymmetric encryption *)
+fun pk(skey):pkey.
+fun aenc(bitstring,pkey,spkey,rand,rand):bitstring.
+
+reduc forall message:bitstring, sk:skey, xspk:spkey, r:rand, t:rand;
+  adec(aenc(message,pk(sk),xspk,r,t), sk) = message.
+
+
+(* Randomized signature *)
+fun spk(sskey):spkey.
+fun sign(bitstring, pkey, sskey, rand, rand):bitstring.
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, t:rand, s:rand, u:rand;
+  verify(aenc(message,xpk,spk(xssk),r,t), sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u),spk(xssk)) = true.
+
+
+(* Randomization *)
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),r,t).
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u).
+
+letfun randomize(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc(ballot,signature,pke,xspk,r,s),
+   randomize_sign(ballot,signature,pke,xspk,r,s)).
+
+
+(* Left randomization - private operation used to model correct randomization by a honest device *)
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),t,v) [private].
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),t,v),xpk,xssk,u,w) [private].
+
+letfun randomize_left(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc_left(ballot,signature,pke,xspk,r,s),
+   randomize_sign_left(ballot,signature,pke,xspk,r,s)).
+
+
+
+(* -- Election setup -- *) 
+(* Election key *)
+free sk_e:skey [private].
+letfun pk_e = pk(sk_e).
+
+(* Voter registration *)
+fun voter_registration(name):bitstring [private].
+reduc forall n:name;
+  is_registered(n,voter_registration(n)) = true.
+
+(* Valid verification keys (declared by the registrar) *)
+fun valid(name,spkey):bitstring [private].
+reduc forall n:name, xspk:spkey;
+  is_valid(n,xspk,valid(n,xspk)) = true.
+
+ 
+(* -- Registrar functions -- *)
+(* Type conversion *)
+fun bitstring_of_vote(vote):bitstring [data, typeConverter].
+
+(* Voting sheet generation *)
+letfun voting_sheet(v:vote,ssk:sskey) =
+  new r:rand;
+  new s:rand;
+  (aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),
+   sign(aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),pk_e,ssk,s,s),
+   r,s).
+
+
+(* -- Names -- *)
+(* Channels *)
+free public:channel.
+
+(* Possible votes *)
+free A:vote.
+free B:vote.
+
+(* Honest voters *)
+free Alice:name.
+free Bob:name.
+
+free ssk_Alice:sskey [private].
+free ssk_Bob:sskey [private].
+
+letfun spk_Alice = spk(ssk_Alice).
+letfun spk_Bob = spk(ssk_Bob).
+
+letfun vreg_Alice = voter_registration(Alice).
+letfun vreg_Bob = voter_registration(Bob).
+
+letfun val_Alice = valid(Alice,spk_Alice).
+letfun val_Bob = valid(Bob,spk_Bob).
+
+(* Server acknowledgement *)
+free ack:bitstring.
+
+(* Dishonest voting device: channel between voting device and voting server leaked *)
+free chan_Alice:channel.
+free chan_Bob:channel.
+
+
+(* -- Tables -- *)
+(* Public Bulletin Board *)
+table BULLETIN_BOARD(spkey,bitstring,bitstring).
+ 
+
+(* -- Processes -- *)
+
+(* Honest registrar *)
+(* generates voting sheets for dishonest voters *)
+(* (the registrar for honest voters is modelled together with the voters: they
+ generate their own voting sheet. *)
+let Honest_Registrar_Dishonest_Voter(n:name) =
+  new ssk:sskey;
+  out(public, (spk(ssk),valid(n,spk(ssk)),A,voting_sheet(A,ssk),B,voting_sheet(B,ssk))).
+
+(* Honest voter, with honest auditing device, honest registrar (equivalent to no audit and honest registrar) *)
+(* generates the voting sheet (honest registrar) *)
+(* votes for choice[A,B] *)
+let Honest_Voter_AB(n:name,reg_n:bitstring) =
+  (* nonces for randomization -- generated in the beginning, as Proverif prefers *)
+  new rv:rand;
+  new sv:rand;
+  new tv:rand;
+  new uv:rand;
+  new ra:rand;
+  new sa:rand;
+  new rb:rand;
+  new sb:rand;
+
+  (* the signature key is not generated here but defined as a private constant *)
+  (* (makes properties easier to encode) *)
+  (* outputting the verification key *)
+  out(public,(spk_Alice,val_Alice));
+  
+  (* generating the voting sheet (models the honest registrar) *)
+  let vote_a = aenc(bitstring_of_vote(A),pk_e,spk_Alice,ra,ra) in
+  let sign_a = sign(vote_a,pk_e,ssk_Alice,sa,sa) in 
+  let vote_b = aenc(bitstring_of_vote(B),pk_e,spk_Alice,rb,rb) in
+  let sign_b = sign(vote_b,pk_e,ssk_Alice,sb,sb) in
+
+  let vote_v = choice[vote_a,vote_b] in
+  let sign_v = choice[sign_a,sign_b] in
+  (* all tests performed by the honest audit device will return true *)
+  (* hence we do not need to model them *)
+  (* (this also models the case where no audit is performed) *)
+
+  (* the dishonest voting device sends the ballot on an unauthenticated channel without randomizing it *)
+  out(public,(n,reg_n,spk_Alice,val_Alice,(vote_v,sign_v)));
+
+  (* verifying that the vote appears on the board *)
+  get BULLETIN_BOARD(=spk_Alice,rand_ballot,sign_rand_ballot) in
+  out(public,n).
+
+
+
+(* Honest voter, performing audit with honest auditing device (or equivalently no audit) *)
+(* generates the voting sheet (honest registrar) *)
+(* votes for choice[B,A] *)
+let Honest_Voter_BA(n:name,reg_n:bitstring) =
+  (* nonces for randomization -- generated in the beginning, as Proverif prefers *)
+  new rv:rand;
+  new sv:rand;
+  new tv:rand;
+  new uv:rand;
+  new ra:rand;
+  new sa:rand;
+  new rb:rand;
+  new sb:rand;
+
+  (* the signature key is not generated here but defined as a private constant *)
+  (* (makes properties easier to encode) *)
+  (* outputting the verification key *)
+  out(public,(spk_Bob,val_Bob));
+  
+  (* generating the voting sheet (models the honest registrar) *)
+  let vote_a = aenc(bitstring_of_vote(A),pk_e,spk_Bob,ra,ra) in
+  let sign_a = sign(vote_a,pk_e,ssk_Bob,sa,sa) in 
+  let vote_b = aenc(bitstring_of_vote(B),pk_e,spk_Bob,rb,rb) in
+  let sign_b = sign(vote_b,pk_e,ssk_Bob,sb,sb) in
+  (* all tests performed by the honest audit device will return true *)
+  (* hence we do not need to model them *)
+  (* (this also models the case where no audit is performed) *)
+
+  let vote_v = choice[vote_b,vote_a] in
+  let sign_v = choice[sign_b,sign_a] in
+
+  (* the dishonest voting device sends the ballot on an unauthenticated channel without randomizing it *)
+  out(public,(n,reg_n,spk_Bob,val_Bob,(vote_v,sign_v)));
+
+  (* verifying that the vote appears on the board *)
+  get BULLETIN_BOARD(=spk_Bob,rand_ballot,sign_rand_ballot) in
+  out(public,n).
+
+
+(* Honest voting server *)
+let Honest_Voting_Server(server_channel:channel) =
+
+  (* nonces for randomization -- generated in the beginning, as Proverif prefers *)
+  new rv:rand;
+  new sv:rand;
+
+  (* receiving the ballot *)
+  in(server_channel,message:bitstring);
+
+  let(n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(ballot:bitstring,signature:bitstring)) =
+    message in
+
+  (* verifications on the ballot *)
+  if (
+   (* the voter is eligible *)
+   is_registered(n,reg_n)=true
+   (* the key (allegedly) signing the ballot is eligible (ie declared valid by the registrar) *)
+   && is_valid(n,spk_n,val_spk_n)=true
+   (* authentication (modelled only for the honest voters): accept votes from
+      Alice (resp. Bob) only on chan_Alice (resp. chan_Bob) *) 
+   && (n <> Alice || server_channel = chan_Alice)
+   && (n <> Bob || server_channel = chan_Bob)
+   (* accepting a ballot signed by Alice's key only if Alice is authenticated *)
+   (* (part of the modelling of privacy: we ensure that Alice and Bob's ballots are received,
+       and the server would then reject other ballots signed with the same key) *)
+(*   && (n = Alice || spk_n<>spk_Alice)
+   && (n = Bob || spk_n<>spk_Bob)*)
+   (* verifying the signature *)
+   && verify(ballot,signature,spk_n) = true)
+  then (
+
+    (* randomizing and publishing the ballot *)
+    let (rand_ballot:bitstring,rand_sign:bitstring) = randomize(ballot,signature,pk_e,spk_n,rv,sv) in
+    insert BULLETIN_BOARD(spk_n,rand_ballot,rand_sign);
+    (* also output the ballot on a public channel (as the attacker cannot read directly from the table) *)
+    out(public,(n,spk_n,rand_ballot,rand_sign));
+
+    (* sending confirmation to the voter (through the voting device) *)
+    out(server_channel,ack)
+
+    )
+  else 0.
+
+(* Tally *)
+let Tally() =
+  (* first retrieve the ballots signed by the honest voters *)
+  (* (we know these are the keys they actually used, by construction) *)
+  get BULLETIN_BOARD(=spk_Alice,rand_ballot_Alice,sign_rand_ballot_Alice) in
+  get BULLETIN_BOARD(=spk_Bob,rand_ballot_Bob,sign_rand_ballot_Bob) in
+
+  (* check that the signature key written on the board indeed signs the ballots*)
+  if (verify(rand_ballot_Alice,sign_rand_ballot_Alice,spk_Alice)=true
+  && verify(rand_ballot_Bob,sign_rand_ballot_Bob,spk_Bob)=true) then (
+
+    (* mixnet *)
+    new mixnet:channel;
+    ( out(mixnet,choice[rand_ballot_Alice,rand_ballot_Bob])
+    | out(mixnet,choice[rand_ballot_Bob,rand_ballot_Alice])
+    |(
+      in(mixnet,b1:bitstring);
+      in(mixnet,b2:bitstring);
+      (* decrypt and output the mixed ballots *)
+      out(public,(adec(b1,sk_e),adec(b2,sk_e)));
+
+      (* decrypt and output the ballots signed with any other key *)
+      !(
+        in(public,spk_n:spkey);
+        if (spk_n <> spk_Alice && spk_n <> spk_Bob) then
+          (get BULLETIN_BOARD(=spk_n,b_n,sign_n) in
+          if (verify(b_n,sign_n,spk_n) = true) then
+            out(public, adec(b_n,sk_e)))
+       )
+     )
+    )
+  ).
+
+
+(* -- Main process -- *)
+process
+  (* setup: output the election public key, register Alice and Bob *)
+  (out(public,pk_e);
+   out(public,voter_registration(Alice));
+   out(public,voter_registration(Bob)))
+ |
+  (* register any number of dishonest agents *)
+  !(in(public,n:name); out(public,(n,voter_registration(n))))
+ |
+  (* registrar for dishonest agents *)
+  ! (new n:name; out(public,n); Honest_Registrar_Dishonest_Voter(n)) (* inputting the name also works *)
+ |
+  (* Alice, Bob vote *)
+   Honest_Voter_AB(Alice,voter_registration(Alice))
+ |
+   Honest_Voter_BA(Bob,voter_registration(Bob))
+ |
+  (* Voting server for Alice, Bob *)
+   Honest_Voting_Server(chan_Alice)
+ |
+   Honest_Voting_Server(chan_Bob)
+  (* Voting server for dishonest voters *)
+ |
+   ! Honest_Voting_Server(public)   
+ |
+   (* Tally *)
+   Tally()

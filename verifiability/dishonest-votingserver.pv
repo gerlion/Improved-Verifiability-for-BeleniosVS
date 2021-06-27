@@ -1,0 +1,20 @@
+#IFDVOTINGSERVER
+(* Dishonest voting server *)
+let Dishonest_Voting_Server(server_channel:channel) =
+  in(server_channel,message:bitstring);
+  let(n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(ballot:bitstring,signature:bitstring)) =
+    message in
+
+  (* even a dishonest server only writes ballots signed by an eligible key on the board, as the board is public and may be audited *)
+  if (is_valid(n,spk_n,val_spk_n)=true && verify(ballot,signature,spk_n)=true)
+  then (
+    (* even a dishonest server does not write duplicate signatures, for the same reason *)
+    get BULLETIN_BOARD(=spk_n,x:bitstring,y:bitstring) in 0 else (
+      event GOING_TO_TALLY(n,spk_n,ballot,adec(ballot,sk_e));
+      insert BULLETIN_BOARD(spk_n,ballot,signature);
+      out(public,(spk_n,ballot,signature)))).
+
+
+
+
+#ENDIF

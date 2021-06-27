@@ -1,0 +1,13 @@
+#IFHREGISTRAR
+(* Honest registrar *)
+(* generates voting sheets, sends them on the specified channel *)
+(* publishes the verification key *)
+let Honest_Registrar(n:name,vs_channel:channel) =
+  new ssk:sskey;
+  out(vs_channel, (spk(ssk),valid(n,spk(ssk)),A,voting_sheet(A,ssk),B,voting_sheet(B,ssk)));
+  out(public,(n,spk(ssk),valid(n,spk(ssk)))).
+
+
+
+
+#ENDIF

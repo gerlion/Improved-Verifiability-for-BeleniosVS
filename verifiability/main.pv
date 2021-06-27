@@ -1,0 +1,59 @@
+
+(* -- Main process -- *)
+process
+  (* leaking the election private key *)
+  out(public,sk_e)
+ |
+  (* register any number of agents *)
+  !(in(public,n:name); out(public,(n,voter_registration(n))))
+ #IFDREGISTRAR|
+  (* dishonest registrar: any key may be declared as valid (eligible) *)
+  !(in(public,(n:name,spk:spkey)); out(public,valid(n,spk)))
+ #ENDIF|
+  (* honest voter voting for A *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF#IFDVOTINGDEVICEout(public,voting_channel); (* dishonest voting device *)
+    #ENDIF
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_A#IFLOSEVS_lostvs#ENDIF#IFLOSEPASSWORD_lostpasswd#ENDIF(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGDEVICEHonest_Voting_Device(voting_channel,voterchanup(n),voterchandown(n))
+    |
+     #ENDIF#IFHVOTINGSERVERHonest_Voting_Server(voterchanup(n),voterchandown(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    #IFLOSEPASSWORD |
+     Impersonate(voterchanup(n)) #ENDIF
+    )
+   )
+ |
+  (* honest voter voting for B *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF#IFDVOTINGDEVICEout(public,voting_channel); (* dishonest voting device *)
+    #ENDIF
+    (#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFHonest_Voter#IFAUDIT_audit#ENDIF_B#IFLOSEVS_lostvs#ENDIF#IFLOSEPASSWORD_lostpasswd#ENDIF(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     #IFHVOTINGDEVICEHonest_Voting_Device(voting_channel,voterchanup(n),voterchandown(n))
+    |
+     #ENDIF#IFHVOTINGSERVERHonest_Voting_Server(voterchanup(n),voterchandown(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+     #IFLOSEPASSWORD |
+     Impersonate(voterchanup(n)) #ENDIF
+    )
+   )
+ |
+  (* dishonest voters *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel;
+    #IFDREGISTRARout(public,vs_channel); (* dishonest registrar *)
+    #ENDIF(#IFHREGISTRARHonest_Registrar(n,vs_channel)
+    |
+     #ENDIFDishonest_Voter(n,vs_channel)
+    |
+     #IFHVOTINGSERVERHonest_Voting_Server(voterchanup(n),voterchandown(n))#ENDIF#IFDVOTINGSERVERDishonest_Voting_Server(public)#ENDIF
+    )
+   )

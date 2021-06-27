@@ -1,0 +1,21 @@
+#IFHAUDIT
+(* Honest auditing device *)
+let Honest_Audit(audit_channel:channel) =
+  (* receiving the voting sheet *)
+  in(audit_channel,(vs:bitstring,na:rand));
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+
+  (* auditing the sheet: ballots and signatures *)
+  if (vote_a = aenc(bitstring_of_vote(A),pk_e,spk_n,ra,ra)
+    && vote_b = aenc(bitstring_of_vote(B),pk_e,spk_n,rb,rb)
+    && verify(vote_a,sign_a,spk_n) = true
+    && verify(vote_b,sign_b,spk_n) = true)
+  then (
+    out(audit_channel,(true,na))).
+
+
+
+
+#ENDIF

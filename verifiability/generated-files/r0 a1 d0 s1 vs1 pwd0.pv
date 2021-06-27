@@ -1,0 +1,407 @@
+(* Verifiability for BeleniosVS *)
+ set preciseActions = true. 
+(* Trust assumptions:
+ - dishonest auditing device
+ - honest registrar
+ - honest voting device
+ - dishonest voting server
+ - leaked voting sheet
+*)
+
+(* -- Types -- *)
+(* Asymmetric keys encryption types *)
+type skey.
+type pkey.
+
+(* Signature keys *)
+type sskey.
+type spkey.
+
+(* Other types *)
+type rand.
+type name.
+type vote.
+type status.
+
+(* -- Equational theory -- *)
+(* Randomized asymmetric encryption *)
+fun pk(skey):pkey.
+fun aenc(bitstring,pkey,spkey,rand,rand):bitstring.
+
+reduc forall message:bitstring, sk:skey, xspk:spkey, r:rand, t:rand;
+  adec(aenc(message,pk(sk),xspk,r,t), sk) = message.
+
+
+(* Randomized signature *)
+fun spk(sskey):spkey.
+fun sign(bitstring, pkey, sskey, rand, rand):bitstring.
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, t:rand, s:rand, u:rand;
+  verify(aenc(message,xpk,spk(xssk),r,t), sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u),spk(xssk)) = true.
+
+
+(* Randomization *)
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),r,t).
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u).
+
+letfun randomize(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc(ballot,signature,pke,xspk,r,s),
+   randomize_sign(ballot,signature,pke,xspk,r,s)).
+
+
+(* Left randomization - private operation used to model correct randomization by a honest device *)
+(*reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),t,v) [private].
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),t,v),xpk,xssk,u,w) [private].
+
+letfun randomize_left(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc_left(ballot,signature,pke,xspk,r,s),
+   randomize_sign_left(ballot,signature,pke,xspk,r,s)).
+*)
+
+
+(* -- Election setup -- *) 
+(* Election key *)
+free sk_e:skey [private].
+letfun pk_e = pk(sk_e).
+
+
+(* Voter registration *)
+fun voter_registration(name):bitstring [private].
+reduc forall n:name;
+  is_registered(n,voter_registration(n)) = true.
+
+(* Valid verification keys (declared by the registrar) *)
+fun valid(name,spkey):bitstring [private].
+reduc forall n:name, xspk:spkey;
+  is_valid(n,xspk,valid(n,xspk)) = true.
+
+
+(* -- Registrar functions -- *)
+(* Type conversion *)
+fun bitstring_of_vote(vote):bitstring [data, typeConverter].
+
+(* Voting sheet generation *)
+letfun voting_sheet(v:vote,ssk:sskey) =
+  new r:rand;
+  new s:rand;
+  (aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),
+   sign(aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),pk_e,ssk,s,s),
+   r,s).
+
+
+(* -- Names -- *)
+(* Channels *)
+free public:channel.
+free impersonate:channel.
+
+(* TH: I've seperated the channel from VD to VS (voterchanup) from the
+channel from VS to VD (voterchandown) *)
+fun voterchanup(name):channel [private].
+fun voterchandown(name):channel [private].
+
+
+
+
+(* Possible votes *)
+free A:vote.
+free B:vote.
+
+(* Corruption status: H = Honest, C = Corrupt (used for events) *)
+free H:status.
+free C:status.
+
+(* Server acknowledgement *)
+free ack:bitstring.
+
+(* -- Tables -- *)
+(* Public Bulletin Board *)
+table BULLETIN_BOARD(spkey,bitstring,bitstring).
+table BULLETIN_BOARD_ID(name).
+
+(* -- Events -- *)
+(* voter has voting material *)
+event VOTER(name,spkey,status).
+
+(* voter has voted *)
+event VOTE(name,bitstring(*,rand*)).
+
+(* voter has verified the vote appears on the board *)
+event VERIFIED(name,bitstring).
+
+(* ballot is going to be tallied *)
+event GOING_TO_TALLY(name,spkey,bitstring,bitstring).
+
+event FINISHED(name,spkey).
+
+(* -- Processes -- *)
+
+
+
+(* Honest registrar *)
+(* generates voting sheets, sends them on the specified channel *)
+(* publishes the verification key *)
+let Honest_Registrar(n:name,vs_channel:channel) =
+  new ssk:sskey;
+  out(vs_channel, (spk(ssk),valid(n,spk(ssk)),A,voting_sheet(A,ssk),B,voting_sheet(B,ssk)));
+  out(public,(n,spk(ssk),valid(n,spk(ssk)))).
+
+
+
+
+
+(* Honest voter, performing audit with dishonest auditing device, voting for A, with a honest voting device *)
+(* losing the voting sheet *)
+let Honest_Voter_audit_A_lostvs(n:name,reg_n:bitstring,vs_channel:channel,voting_channel:channel) =
+
+  (* receiving the voting sheet *)
+  in(vs_channel,vs:bitstring);
+
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+ 
+  (* the voter is then associated to the verification key *)
+  event VOTER(n,spk_n,H);
+
+  (* no authentic channel between voting device and voting server  (lost password or dishonest voting device or server) *)
+  out(public,(voterchanup(n),voterchandown(n))); 
+  (* losing the voting sheet *)
+  out(public,vs);
+  (* auditing the voting sheet with a dishonest audit device: no verification is actually performed, but the voting sheet is leaked to the attacker *)
+  out(public,vs);
+  in(public,=true);
+  
+  let vote_v = vote_a in
+  let sign_v = sign_a in
+    
+  (* sending the ballot and signature to the voting device *)
+  event VOTE(n,bitstring_of_vote(A));
+  out(voting_channel,(n,reg_n,spk_n,val_spk_n,(vote_v,sign_v)));
+
+  (* getting confirmation from the server through the voting device *)
+  in(voting_channel,=ack);
+
+  (* verifying that the vote appears on the board *)
+  get BULLETIN_BOARD(=spk_n,rand_ballot,sign_rand_ballot) in
+  event VERIFIED(n,bitstring_of_vote(A));
+event FINISHED(n, spk_n).
+
+
+
+(* Honest voter, performing audit with dishonest auditing device, voting for B, with a honest voting device *)
+(* losing the voting sheet *)
+let Honest_Voter_audit_B_lostvs(n:name,reg_n:bitstring,vs_channel:channel,voting_channel:channel) =
+
+  (* receiving the voting sheet *)
+  in(vs_channel,vs:bitstring);
+
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+ 
+  (* the voter is then associated to the verification key *)
+  event VOTER(n,spk_n,H);
+
+  (* no authentic channel between voting device and voting server  (lost password or dishonest voting device or server) *)
+  out(public,(voterchanup(n),voterchandown(n))); 
+  (* losing the voting sheet *)
+  out(public,vs);
+  (* auditing the voting sheet with a dishonest audit device: no verification is actually performed, but the voting sheet is leaked to the attacker *)
+  out(public,vs);
+  in(public,=true);
+  
+  let vote_v = vote_b in
+  let sign_v = sign_b in
+    
+  (* sending the ballot and signature to the voting device *)
+  event VOTE(n,bitstring_of_vote(B));
+  out(voting_channel,(n,reg_n,spk_n,val_spk_n,(vote_v,sign_v)));
+
+  (* getting confirmation from the server through the voting device *)
+  in(voting_channel,=ack);
+
+  (* verifying that the vote appears on the board *)
+  get BULLETIN_BOARD(=spk_n,rand_ballot,sign_rand_ballot) in
+  event VERIFIED(n,bitstring_of_vote(B));
+event FINISHED(n, spk_n).
+
+
+
+(* Dishonest voter *)
+let Dishonest_Voter(n:name, vs_channel:channel) =
+  (* receiving the voting sheet *)
+  in(vs_channel,vs:bitstring);
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+
+  (* the voter is then associated to the verification key *)
+  event VOTER(n,spk_n,C);
+  (* The voter gives everything to the attacker *)
+  event FINISHED(n,spk_n);
+  out(public,(vs,voterchanup(n),voterchandown(n))).
+
+
+
+
+(* Honest voting device *)
+let Honest_Voting_Device(voting_channel:channel,server_channelup:channel,server_channeldown:channel) =
+  (* nonces for randomization -- generated in the beginning, as Proverif prefers *)
+  new rv:rand;
+  new sv:rand;
+  new nounce:rand;
+
+  (* receiving the ballot and signature *)
+  in(voting_channel,message:bitstring);
+  let (n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(vote_v:bitstring,sign_v:bitstring)) =
+    message in
+  (* randomizing *)
+  let (b_v:bitstring,s_v:bitstring) = randomize(vote_v,sign_v,pk_e,spk_n,rv,sv) in
+
+  out(server_channelup,(n,reg_n,spk_n,val_spk_n,(b_v,s_v),nounce));
+  
+  (* getting confirmation from the server and forwarding it to the voter *)
+  in(server_channeldown,ackt:bitstring);
+   let (=ack,nounce':rand) = ackt in
+   if (nounce' = nounce) then
+   out(voting_channel,ack).
+
+
+
+
+
+
+
+
+(* Dishonest voting server *)
+let Dishonest_Voting_Server(server_channel:channel) =
+  in(server_channel,message:bitstring);
+  let(n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(ballot:bitstring,signature:bitstring)) =
+    message in
+
+  (* even a dishonest server only writes ballots signed by an eligible key on the board, as the board is public and may be audited *)
+  if (is_valid(n,spk_n,val_spk_n)=true && verify(ballot,signature,spk_n)=true)
+  then (
+    (* even a dishonest server does not write duplicate signatures, for the same reason *)
+    get BULLETIN_BOARD(=spk_n,x:bitstring,y:bitstring) in 0 else (
+      event GOING_TO_TALLY(n,spk_n,ballot,adec(ballot,sk_e));
+      insert BULLETIN_BOARD(spk_n,ballot,signature);
+      out(public,(spk_n,ballot,signature)))).
+
+
+
+
+
+
+
+(* -- Security properties -- *)
+(* Basic reachability test (NOTE THIS IS INTENDED TO FAIL) *)
+query n:name, spk_n:spkey;
+    event(VOTER(n,spk_n,H)) && event(FINISHED(n,spk_n)).
+
+(* Honest vote consistency *)
+query n:name,v:bitstring(*,k:rand*);
+  event(VERIFIED(n,v)) ==> event(VOTE(n,v)).
+
+(* Cast as intended (ID) *)
+query n:name, spk_n:spkey, b:bitstring, v:bitstring,
+   spk_1:spkey, spk_2:spkey, spk_3:spkey;
+  event(GOING_TO_TALLY(n,spk_n,b,v))  && event(FINISHED(n,spk_3))  ==>
+  (event(VOTER(n,spk_1,C))
+   ||
+   (event(VOTER(n,spk_2,H)) && event(VOTE(n,v)))
+  ).
+
+(* Tallied as cast (ID) *)
+query n:name,v:bitstring,spk_n:spkey,b:bitstring;
+  event(VERIFIED(n,v)) ==>
+  (event(GOING_TO_TALLY(n,spk_n,b,v))).
+
+(* Cast as intended (CRED) *)
+query n:name, spk_n:spkey, b:bitstring, v:bitstring,
+     n1:name, n2:name, n3:name;
+  event(GOING_TO_TALLY(n1,spk_n,b,v)) && event(FINISHED(n2,spk_n))  ==>
+  (event(VOTER(n3,spk_n,C))
+   ||
+   (event(VOTER(n,spk_n,H)) && event(VOTE(n,v)))
+  ).
+
+(* Tallied as cast (CRED) *)
+query n:name, v:bitstring, nn:name, spk_n:spkey,b:bitstring;
+  event(VERIFIED(n,v)) ==>
+     (event(VOTER(n,spk_n,H)) && event(GOING_TO_TALLY(nn,spk_n,b,v))).
+
+
+
+
+
+(* -- Main process -- *)
+process
+  (* leaking the election private key *)
+  out(public,sk_e)
+ |
+  (* register any number of agents *)
+  !(in(public,n:name); out(public,(n,voter_registration(n))))
+ |
+  (* honest voter voting for A *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    
+    (Honest_Registrar(n,vs_channel)
+    |
+     Honest_Voter_audit_A_lostvs(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     Honest_Voting_Device(voting_channel,voterchanup(n),voterchandown(n))
+    |
+     Dishonest_Voting_Server(public)
+    
+    )
+   )
+ |
+  (* honest voter voting for B *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel; new voting_channel:channel;
+    
+    (Honest_Registrar(n,vs_channel)
+    |
+     Honest_Voter_audit_B_lostvs(n,voter_registration(n),vs_channel,voting_channel)
+    |
+     Honest_Voting_Device(voting_channel,voterchanup(n),voterchandown(n))
+    |
+     Dishonest_Voting_Server(public)
+     
+    )
+   )
+ |
+  (* dishonest voters *)
+  !(new n:name; out(public,(n,voter_registration(n)));
+    new vs_channel:channel;
+    (Honest_Registrar(n,vs_channel)
+    |
+     Dishonest_Voter(n,vs_channel)
+    |
+     Dishonest_Voting_Server(public)
+    )
+   )

@@ -1,0 +1,165 @@
+(* Verifiability for BeleniosVS *)
+#IFHREGISTRAR set preciseActions = true. #ENDIF
+(* Trust assumptions:
+ - #IFHAUDIThonest auditing device#ENDIF#IFDAUDITdishonest auditing device#ENDIF#IFNOAUDITno audit#ENDIF
+ - #IFDREGISTRARdis#ENDIFhonest registrar
+ - #IFDVOTINGDEVICEdis#ENDIFhonest voting device
+ - #IFDVOTINGSERVERdis#ENDIFhonest voting server#IFLOSEVS
+ - leaked voting sheet#ENDIF#IFLOSEPASSWORD
+ - leaked authentication password#ENDIF
+*)
+
+(* -- Types -- *)
+(* Asymmetric keys encryption types *)
+type skey.
+type pkey.
+
+(* Signature keys *)
+type sskey.
+type spkey.
+
+(* Other types *)
+type rand.
+type name.
+type vote.
+type status.
+
+(* -- Equational theory -- *)
+(* Randomized asymmetric encryption *)
+fun pk(skey):pkey.
+fun aenc(bitstring,pkey,spkey,rand,rand):bitstring.
+
+reduc forall message:bitstring, sk:skey, xspk:spkey, r:rand, t:rand;
+  adec(aenc(message,pk(sk),xspk,r,t), sk) = message.
+
+
+(* Randomized signature *)
+fun spk(sskey):spkey.
+fun sign(bitstring, pkey, sskey, rand, rand):bitstring.
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, t:rand, s:rand, u:rand;
+  verify(aenc(message,xpk,spk(xssk),r,t), sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u),spk(xssk)) = true.
+
+
+(* Randomization *)
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),r,t).
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),r,t),xpk,xssk,s,u).
+
+letfun randomize(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc(ballot,signature,pke,xspk,r,s),
+   randomize_sign(ballot,signature,pke,xspk,r,s)).
+
+
+(* Left randomization - private operation used to model correct randomization by a honest device *)
+(*reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_aenc_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk, spk(xssk),t,u) =
+  aenc(message,xpk,spk(xssk),t,v) [private].
+
+reduc forall message:bitstring, xpk:pkey, xssk:sskey, r:rand, s:rand, t:rand, u:rand, v:rand, w:rand;
+  randomize_sign_left(
+    aenc(message,xpk,spk(xssk),r,v),
+    sign(aenc(message,xpk,spk(xssk),r,v),xpk,xssk,s,w),
+    xpk,spk(xssk),t,u) =
+  sign(aenc(message,xpk,spk(xssk),t,v),xpk,xssk,u,w) [private].
+
+letfun randomize_left(ballot:bitstring,signature:bitstring,pke:pkey,xspk:spkey,r:rand,s:rand) =
+  (randomize_aenc_left(ballot,signature,pke,xspk,r,s),
+   randomize_sign_left(ballot,signature,pke,xspk,r,s)).
+*)
+
+
+(* -- Election setup -- *) 
+(* Election key *)
+free sk_e:skey [private].
+letfun pk_e = pk(sk_e).
+
+
+(* Voter registration *)
+fun voter_registration(name):bitstring [private].
+reduc forall n:name;
+  is_registered(n,voter_registration(n)) = true.
+
+(* Valid verification keys (declared by the registrar) *)
+fun valid(name,spkey):bitstring [private].
+reduc forall n:name, xspk:spkey;
+  is_valid(n,xspk,valid(n,xspk)) = true.
+
+
+(* -- Registrar functions -- *)
+(* Type conversion *)
+fun bitstring_of_vote(vote):bitstring [data, typeConverter].
+
+(* Voting sheet generation *)
+letfun voting_sheet(v:vote,ssk:sskey) =
+  new r:rand;
+  new s:rand;
+  (aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),
+   sign(aenc(bitstring_of_vote(v),pk_e,spk(ssk),r,r),pk_e,ssk,s,s),
+   r,s).
+
+
+(* -- Names -- *)
+(* Channels *)
+free public:channel.
+free impersonate:channel.
+
+(* TH: I've seperated the channel from VD to VS (voterchanup) from the
+channel from VS to VD (voterchandown) *)
+fun voterchanup(name):channel [private].
+fun voterchandown(name):channel [private].
+
+#IFLOSEPASSWORD
+let Impersonate(voterchan: channel) =
+ in(impersonate,msg:bitstring);
+ out(voterchan,msg).
+#ENDIF
+
+
+(* Possible votes *)
+free A:vote.
+free B:vote.
+
+(* Corruption status: H = Honest, C = Corrupt (used for events) *)
+free H:status.
+free C:status.
+
+(* Server acknowledgement *)
+free ack:bitstring.
+
+(* -- Tables -- *)
+(* Public Bulletin Board *)
+table BULLETIN_BOARD(spkey,bitstring,bitstring).
+table BULLETIN_BOARD_ID(name).
+
+(* -- Events -- *)
+(* voter has voting material *)
+event VOTER(name,spkey,status).
+
+(* voter has voted *)
+event VOTE(name,bitstring(*,rand*)).
+
+(* voter has verified the vote appears on the board *)
+event VERIFIED(name,bitstring).
+
+(* ballot is going to be tallied *)
+event GOING_TO_TALLY(name,spkey,bitstring,bitstring).
+
+event FINISHED(name,spkey).
+
+(* -- Processes -- *)
+
+

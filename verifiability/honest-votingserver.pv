@@ -1,0 +1,44 @@
+#IFHVOTINGSERVER
+(* Honest voting server *)
+let Honest_Voting_Server(server_channelup:channel,server_channeldown:channel) =
+  new rv:rand;
+  new sv:rand;
+
+  (*receiving the ballot and signature *)
+  in(server_channelup,message:bitstring);
+  let (n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(ballot:bitstring,signature:bitstring),nounce:rand) =
+    message in
+
+  (* verifications on the ballot *)
+  if (
+   (* the voter is eligible *)
+   is_registered(n,reg_n)=true
+   (* the key (allegedly) signing the ballot is eligible *)
+   && is_valid(n,spk_n,val_spk_n) = true
+   (* authentication: accept votes from n only on the channel for n *)
+   && server_channelup = voterchanup(n)
+   (* verifying the signature *)
+   && verify(ballot,signature,spk_n) = true)
+  then (
+    (* randomizing and publishing the ballot *)
+    let (rand_ballot:bitstring,rand_sign:bitstring) = randomize(ballot,signature,pk_e,spk_n,rv,sv) in
+    (* check that spk_n does not already occur on the board *)
+    get BULLETIN_BOARD(=spk_n,x:bitstring,y:bitstring) in 0 else (
+	get BULLETIN_BOARD_ID(=n) in 0 else (
+	    insert BULLETIN_BOARD_ID(n);
+	    event GOING_TO_TALLY(n,spk_n,rand_ballot,adec(rand_ballot,sk_e));
+            insert BULLETIN_BOARD(spk_n,rand_ballot,rand_sign);
+            (* also output the ballot on a public channel (as the attacker cannot read directly from the table) *)
+            out(public,(spk_n,rand_ballot,rand_sign));
+            (* sending confirmation to the voting device *)
+            out(server_channeldown,(ack,nounce));
+            out(public,(ack,nounce))
+	)
+      )
+    )
+  else 0.
+
+
+
+
+#ENDIF

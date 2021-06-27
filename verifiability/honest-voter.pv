@@ -1,0 +1,47 @@
+(* Honest voter, #IFAUDITperforming audit with #ENDIF#IFDAUDITdis#ENDIF#IFAUDIThonest auditing device, #ENDIF#IFNOAUDITno audit, #ENDIFvoting for $VOTE, with a #IFDVOTINGDEVICEdis#ENDIFhonest voting device *)#IFLOSEVS
+(* losing the voting sheet *)#ENDIF#IFLOSEPASSWORD
+(* losing the authentication password *)#ENDIF
+let Honest_Voter#IFAUDIT_audit#ENDIF_$VOTE#IFLOSEVS_lostvs#ENDIF#IFLOSEPASSWORD_lostpasswd#ENDIF(n:name,reg_n:bitstring,vs_channel:channel,voting_channel:channel) =
+
+  (* receiving the voting sheet *)
+  in(vs_channel,vs:bitstring);
+
+  let (spk_n:spkey, val_spk_n:bitstring,
+    =A,(vote_a:bitstring,sign_a:bitstring,ra:rand,sa:rand),
+    =B,(vote_b:bitstring,sign_b:bitstring,rb:rand,sb:rand)) = vs in
+ 
+  (* the voter is then associated to the verification key *)
+  event VOTER(n,spk_n,H);
+
+  #IFDVOTERCHAN(* no authentic channel between voting device and voting server  (lost password or dishonest voting device or server) *)
+  out(public,(voterchanup(n),voterchandown(n))); 
+  #ENDIF#IFLOSEVS(* losing the voting sheet *)
+  out(public,vs);
+  #ENDIF#IFHAUDIT(* auditing the voting sheet with honest audit device *)
+  if (vote_a = aenc(bitstring_of_vote(A),pk_e,spk_n,ra,ra)
+    && vote_b = aenc(bitstring_of_vote(B),pk_e,spk_n,rb,rb)
+    && verify(vote_a,sign_a,spk_n) = true
+    && verify(vote_b,sign_b,spk_n) = true)
+  then (
+  #ENDIF#IFDAUDIT(* auditing the voting sheet with a dishonest audit device: no verification is actually performed, but the voting sheet is leaked to the attacker *)
+  out(public,vs);
+  in(public,=true);
+  #ENDIF#IFNOAUDIT(* no audit of the voting sheet is performed *)
+  #ENDIF
+#IFHAUDIT  #ENDIF  let vote_v = vote_$vote in
+#IFHAUDIT  #ENDIF  let sign_v = sign_$vote in
+    
+#IFHAUDIT  #ENDIF  (* sending the ballot and signature to the voting device *)
+#IFHAUDIT  #ENDIF  event VOTE(n,bitstring_of_vote($VOTE));
+#IFHAUDIT  #ENDIF  out(voting_channel,(n,reg_n,spk_n,val_spk_n,(vote_v,sign_v)));
+
+#IFHAUDIT  #ENDIF  (* getting confirmation from the server through the voting device *)
+#IFHAUDIT  #ENDIF  in(voting_channel,=ack);
+
+#IFHAUDIT  #ENDIF  (* verifying that the vote appears on the board *)
+#IFHAUDIT  #ENDIF  get BULLETIN_BOARD(=spk_n,rand_ballot,sign_rand_ballot) in
+#IFHAUDIT  #ENDIF  event VERIFIED(n,bitstring_of_vote($VOTE));
+event FINISHED(n, spk_n)#IFHAUDIT)#ENDIF.
+
+
+

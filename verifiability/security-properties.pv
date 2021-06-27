@@ -1,0 +1,45 @@
+#IFHVOTINGSERVER
+axiom n:name, spk_n:spkey, b:bitstring, v:bitstring, spk_n':spkey, b':bitstring, v':bitstring;
+    event(GOING_TO_TALLY(n,spk_n,b,v)) && event(GOING_TO_TALLY(n,spk_n',b',v'))   ==> spk_n = spk_n' && b 	= b' && v = v'.
+#ENDIF
+
+(* -- Security properties -- *)
+(* Basic reachability test (NOTE THIS IS INTENDED TO FAIL) *)
+query n:name, spk_n:spkey;
+    event(VOTER(n,spk_n,H)) && event(FINISHED(n,spk_n)).
+
+(* Honest vote consistency *)
+query n:name,v:bitstring(*,k:rand*);
+  event(VERIFIED(n,v)) ==> event(VOTE(n,v)).
+
+(* Cast as intended (ID) *)
+query n:name, spk_n:spkey, b:bitstring, v:bitstring,
+   spk_1:spkey, spk_2:spkey, spk_3:spkey;
+  event(GOING_TO_TALLY(n,spk_n,b,v))  && event(FINISHED(n,spk_3))  ==>
+  (event(VOTER(n,spk_1,C))
+   ||
+   (event(VOTER(n,spk_2,H)) && event(VOTE(n,v)))
+  ).
+
+(* Tallied as cast (ID) *)
+query n:name,v:bitstring,spk_n:spkey,b:bitstring;
+  event(VERIFIED(n,v)) ==>
+  (event(GOING_TO_TALLY(n,spk_n,b,v))).
+
+(* Cast as intended (CRED) *)
+query n:name, spk_n:spkey, b:bitstring, v:bitstring,
+     n1:name, n2:name, n3:name;
+  event(GOING_TO_TALLY(n1,spk_n,b,v)) && event(FINISHED(n2,spk_n))  ==>
+  (event(VOTER(n3,spk_n,C))
+   ||
+   (event(VOTER(n,spk_n,H)) && event(VOTE(n,v)))
+  ).
+
+(* Tallied as cast (CRED) *)
+query n:name, v:bitstring, nn:name, spk_n:spkey,b:bitstring;
+  event(VERIFIED(n,v)) ==>
+     (event(VOTER(n,spk_n,H)) && event(GOING_TO_TALLY(nn,spk_n,b,v))).
+
+
+
+

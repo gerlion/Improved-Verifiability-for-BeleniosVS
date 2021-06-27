@@ -1,0 +1,90 @@
+*-----------------------------------------------*
+|          Verifiability of BeleniosVS          |
+*-----------------------------------------------*
+
+REQUIREMENTS
+
+- The ProVerif protocol verifier.
+It can be installed using the Opam package manager: opam install proverif
+and is also available from http://prosecco.gforge.inria.fr/personal/bblanche/proverif/
+Versions 1.98pl1 and 2.00 are known to work.
+Note that the scripts assume proverif is in the PATH.
+
+
+- The bash shell and the perl interpreter are used by the scripts used to generate and verify all cases.
+These scripts are optional, as we provide all generated files, and proverif can be run manually on them.
+
+
+
+
+USAGE
+
+
+./all.sh
+ generates all proverif files in ./generated-files/, runs proverif,
+ and displays the results. This folder needs to exist before running the script.
+
+
+
+./gen.pl [options]
+ prints on stdout the proverif file for the scenario specified by the options
+
+ options:
+  --registrar (honest|dishonest), --r (honest|dishonest)
+    honest or dishonest registrar (default: honest)
+
+  --audit (honest|dishonest|none), --a (honest|dishonest|none)
+    honest or dishonest or no audit for all voters (default: honest)
+
+  --votingdevice (honest|dishonest), --d (honest|dishonest)
+    honest or dishonest voting devices for all voters (default: honest)
+
+  --votingserver (honest|dishonest), --s (honest|dishonest)
+    honest or dishonest voting server (default: honest)
+
+  --votingsheet (secret|lost), --vs (secret|lost)
+    voting sheets remain secret or are lost for all voters (default: secret)
+    (honest, dishonest can be used as synonymous for resp. secret, lost)
+    
+  --password (secret|lost), --p (secret|lost)
+    passwords remain secret or are lost for all voters (default: secret)
+    (honest, dishonest can be used as synonymous for resp. secret, lost)
+
+  --file, --f
+    do not print the output to stdout
+    instead, store it in a file at
+    ./generated-files/<name generated from the other options>.pv
+    and print the path to the generated file
+
+  Note: 0, 1, 2 can be used as synonymous for honest, dishonest, none
+
+
+
+
+./gen-both.pl [--file, --f]
+ prints on stdout the proverif file for the scenario where all authorities are honest,
+ some voters lose their voting sheet and use dishonest audit devices,
+ others lose their passwords and use dishonest voting devices
+
+ options:
+  --file, --f
+    do not print the output to stdout
+    instead, store it in a file at ./generated-files/both-r0 a0 d0 s0 vs0 pwd0.pv
+    and print the path to the generated file
+
+
+
+./scan.pl [options]
+ reads on stdin the output of proverif on a file
+ parses it and determines whether verifiability was proved
+ (depending on the honesty of the voting server and registrar specified as options)
+ print the result to stdout
+
+ options:
+  --registrar (honest|dishonest), --r (honest|dishonest)
+    honest or dishonest registrar, applies the theorem for
+    the honest registrar if possible (default: honest)
+
+  --votingserver (honest|dishonest), --s (honest|dishonest)
+    honest or dishonest voting server, applies the theorem for
+    the honest voting server if possible (default: honest)

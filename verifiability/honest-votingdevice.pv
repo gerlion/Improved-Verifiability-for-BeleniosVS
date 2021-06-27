@@ -1,0 +1,28 @@
+#IFHVOTINGDEVICE
+(* Honest voting device *)
+let Honest_Voting_Device(voting_channel:channel,server_channelup:channel,server_channeldown:channel) =
+  (* nonces for randomization -- generated in the beginning, as Proverif prefers *)
+  new rv:rand;
+  new sv:rand;
+  new nounce:rand;
+
+  (* receiving the ballot and signature *)
+  in(voting_channel,message:bitstring);
+  let (n:name,reg_n:bitstring,spk_n:spkey,val_spk_n:bitstring,(vote_v:bitstring,sign_v:bitstring)) =
+    message in
+  (* randomizing *)
+  let (b_v:bitstring,s_v:bitstring) = randomize(vote_v,sign_v,pk_e,spk_n,rv,sv) in
+
+  out(server_channelup,(n,reg_n,spk_n,val_spk_n,(b_v,s_v),nounce));
+  
+  (* getting confirmation from the server and forwarding it to the voter *)
+  in(server_channeldown,ackt:bitstring);
+   let (=ack,nounce':rand) = ackt in
+   if (nounce' = nounce) then
+   out(voting_channel,ack).
+
+
+
+
+
+#ENDIF
