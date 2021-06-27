@@ -1,5 +1,5 @@
 This project is based on work by Véronique Cortier, Alicia Filipiak, and Joseph Lallemand.
-The authors behind the update will be released after the anonymous review is over.
+It has been expanded by Thomas Haines and Rajeev Gore in their work "Improved Verifiability for BeleniosVS."
 
 REQUIREMENTS TO VERIFY THE MODELS
 
